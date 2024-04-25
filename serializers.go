@@ -17,20 +17,20 @@ package main
 import (
 	"bytes"
 	"encoding/json"
-	"io/ioutil"
+	"os"
 	"strconv"
 	"time"
 
+	"github.com/influxdata/line-protocol/v2/lineprotocol"
+	"github.com/linkedin/goavro"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/prompb"
 	"github.com/sirupsen/logrus"
-
-	"github.com/linkedin/goavro"
 )
 
 // Serializer represents an abstract metrics serializer
 type Serializer interface {
-	Marshal(metric map[string]interface{}) ([]byte, error)
+	Marshal(name string, sample *prompb.Sample, labels *map[string]string) ([]byte, error)
 }
 
 // Serialize generates the JSON representation for a given Prometheus metric.
@@ -54,15 +54,8 @@ func Serialize(s Serializer, req *prompb.WriteRequest) (map[string][][]byte, err
 				continue
 			}
 
-			epoch := time.Unix(sample.Timestamp/1000, 0).UTC()
-			m := map[string]interface{}{
-				"timestamp": epoch.Format(time.RFC3339),
-				"value":     strconv.FormatFloat(sample.Value, 'f', -1, 64),
-				"name":      name,
-				"labels":    labels,
-			}
+			data, err := s.Marshal(name, &sample, &labels)
 
-			data, err := s.Marshal(m)
 			if err != nil {
 				serializeFailed.Add(float64(1))
 				logrus.WithError(err).Errorln("couldn't marshal timeseries")
@@ -79,7 +72,15 @@ func Serialize(s Serializer, req *prompb.WriteRequest) (map[string][][]byte, err
 type JSONSerializer struct {
 }
 
-func (s *JSONSerializer) Marshal(metric map[string]interface{}) ([]byte, error) {
+func (s *JSONSerializer) Marshal(name string, sample *prompb.Sample, labels *map[string]string) ([]byte, error) {
+
+	epoch := time.Unix(sample.Timestamp/1000, 0).UTC()
+	metric := map[string]interface{}{
+		"timestamp": epoch.Format(time.RFC3339),
+		"value":     strconv.FormatFloat(sample.Value, 'f', -1, 64),
+		"name":      name,
+		"labels":    labels,
+	}
 	return json.Marshal(metric)
 }
 
@@ -92,13 +93,20 @@ type AvroJSONSerializer struct {
 	codec *goavro.Codec
 }
 
-func (s *AvroJSONSerializer) Marshal(metric map[string]interface{}) ([]byte, error) {
+func (s *AvroJSONSerializer) Marshal(name string, sample *prompb.Sample, labels *map[string]string) ([]byte, error) {
+	epoch := time.Unix(sample.Timestamp/1000, 0).UTC()
+	metric := map[string]interface{}{
+		"timestamp": epoch.Format(time.RFC3339),
+		"value":     strconv.FormatFloat(sample.Value, 'f', -1, 64),
+		"name":      name,
+		"labels":    labels,
+	}
 	return s.codec.TextualFromNative(nil, metric)
 }
 
 // NewAvroJSONSerializer builds a new instance of the AvroJSONSerializer
 func NewAvroJSONSerializer(schemaPath string) (*AvroJSONSerializer, error) {
-	schema, err := ioutil.ReadFile(schemaPath)
+	schema, err := os.ReadFile(schemaPath)
 	if err != nil {
 		logrus.WithError(err).Errorln("couldn't read avro schema")
 		return nil, err
@@ -151,4 +159,26 @@ func filter(name string, labels map[string]string) bool {
 		}
 	}
 	return false
+}
+
+
+type InfluxDBSerializer struct {
+
+}
+
+func (s *InfluxDBSerializer) Marshal(name string, sample *prompb.Sample, labels *map[string]string) ([]byte, error) {
+    // reference : https://github.com/influxdata/line-protocol/blob/v2/lineprotocol/example_test.go#L73
+	var enc lineprotocol.Encoder
+
+	enc.SetPrecision(lineprotocol.Second)
+	enc.StartLine(name)
+	for k, v := range *labels {
+		enc.AddTag(k, v)
+	}
+	enc.AddField(name, lineprotocol.MustNewValue(sample.GetValue()))
+	return enc.Bytes(), nil
+}
+
+func NewInfluxDBSerializer() (*InfluxDBSerializer, error) {
+	return &InfluxDBSerializer{}, nil
 }

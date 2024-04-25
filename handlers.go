@@ -16,7 +16,7 @@ package main
 
 import (
 	"fmt"
-	"io/ioutil"
+    "io"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -34,7 +34,7 @@ func receiveHandler(producer *kafka.Producer, serializer Serializer) func(c *gin
 
 		httpRequestsTotal.Add(float64(1))
 
-		compressed, err := ioutil.ReadAll(c.Request.Body)
+		compressed, err := io.ReadAll(c.Request.Body)
 		if err != nil {
 			c.AbortWithStatus(http.StatusInternalServerError)
 			logrus.WithError(err).Error("couldn't read body")

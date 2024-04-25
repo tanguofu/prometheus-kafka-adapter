@@ -8,6 +8,7 @@ require (
 	github.com/gin-gonic/gin v1.9.1
 	github.com/gogo/protobuf v1.3.2
 	github.com/golang/snappy v0.0.4
+	github.com/influxdata/line-protocol/v2 v2.2.1
 	github.com/linkedin/goavro v2.1.0+incompatible
 	github.com/prometheus/client_golang v1.16.0
 	github.com/prometheus/client_model v0.4.0

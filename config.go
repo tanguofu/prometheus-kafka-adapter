@@ -16,12 +16,13 @@ package main
 
 import (
 	"fmt"
-	dto "github.com/prometheus/client_model/go"
-	"github.com/prometheus/common/expfmt"
-	"gopkg.in/yaml.v2"
 	"os"
 	"strings"
 	"text/template"
+
+	dto "github.com/prometheus/client_model/go"
+	"github.com/prometheus/common/expfmt"
+	"gopkg.in/yaml.v2"
 
 	"github.com/sirupsen/logrus"
 )
@@ -170,6 +171,8 @@ func parseSerializationFormat(value string) (Serializer, error) {
 		return NewJSONSerializer()
 	case "avro-json":
 		return NewAvroJSONSerializer("schemas/metric.avsc")
+	case "influxdb":
+		return NewInfluxDBSerializer()
 	default:
 		logrus.WithField("serialization-format-value", value).Warningln("invalid serialization format, using json")
 		return NewJSONSerializer()
